@@ -1,0 +1,5 @@
+# Core relies only on the Python standard library.
+# PNG export is opt-in:
+Pillow>=10.0
+# Dev/test tooling:
+pytest>=7.0

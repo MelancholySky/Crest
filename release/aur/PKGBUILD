@@ -1,0 +1,30 @@
+# Maintainer: Melancholy Sky <melancholysky@outlook.com>
+# AUR package: crest-art
+
+pkgname=crest-art
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Generative terminal-art CLI — render animated parametric patterns with ANSI truecolour"
+arch=('any')
+url="https://github.com/melancholysky/crest"
+license=('MIT')
+depends=('python')
+makedepends=('python-build' 'python-installer' 'python-wheel')
+optdepends=('python-pillow: PNG export support')
+source=("https://files.pythonhosted.org/packages/source/c/crest-art/crest_art-$pkgver.tar.gz")
+sha256sums=('4123d2e698e45a2e24593853afb5d2ed87a6606a93026a8414c1e0e7f0e97f12')
+
+build() {
+  cd "crest_art-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "crest_art-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+
+# To refresh the checksum after a new release:
+#   updpkgsums   (from pkgconf)   or   sha256sum "crest_art-$pkgver.tar.gz"
+# Then regenerate .SRCINFO:   makepkg --printsrcinfo > .SRCINFO
