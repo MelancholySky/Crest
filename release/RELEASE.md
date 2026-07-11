@@ -94,7 +94,10 @@ jobs:
 
    ## Installation
        pip install crest-art          # Core (no dependencies)
-       pip install crest-art[png]       # With PNG export
+       pip install crest-art[png]     # With PNG export
+
+   > Note: the PyPI package is `crest-art` (the name `crest` was already
+   > taken on PyPI), but the installed command is still just `crest`.
 
    ## Quick Start
        crest                          # Interactive wizard

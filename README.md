@@ -25,10 +25,12 @@ cross-platform, and easy to read.
 ## Quick start
 
 ```bash
-# From the project root
-cd crest
+# From PyPI (core has no dependencies; add [png] for image export)
+pip install crest-art
+pip install crest-art[png]   # + Pillow for PNG export
 
-# Install (core has no dependencies; add [png] for image export)
+# Or, from the project root for local development:
+cd crest
 pip install -e .            # core only
 pip install -e ".[png]"     # + Pillow for PNG export
 
