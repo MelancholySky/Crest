@@ -1,7 +1,8 @@
 # Releasing crest
 
-This guide covers packaging and publishing **crest v0.1.0** to GitHub and PyPI.
-The package is already built and verified; these are the steps to distribute it.
+This guide covers packaging and publishing a **crest** release to GitHub and
+PyPI. The package is built and verified in step 1; the remaining steps
+distribute it.
 
 ## Prerequisites
 
@@ -9,6 +10,13 @@ The package is already built and verified; these are the steps to distribute it.
 - A [PyPI](https://pypi.org) account (for upload) and a GitHub repo at
   `https://github.com/melancholysky/crest`
 - Build tooling: `pip install build twine`
+
+Commands below use a `$VERSION` shell variable as a placeholder for the
+release version. Set it once in your shell before running them:
+
+```bash
+VERSION=0.1.0   # replace with the version you are releasing
+```
 
 ## 1. Build the distribution
 
@@ -20,8 +28,8 @@ python -m build
 
 Outputs land in `dist/`:
 
-- `crest_art-0.1.0-py3-none-any.whl` (universal wheel)
-- `crest_art-0.1.0.tar.gz` (source distribution)
+- `crest_art-$VERSION-py3-none-any.whl` (universal wheel)
+- `crest_art-$VERSION.tar.gz` (source distribution)
 
 Verify the package metadata before publishing:
 
@@ -35,10 +43,10 @@ Manual upload with twine:
 
 ```bash
 # Optional: test on PyPI staging first
-twine upload --repository testpypi dist/crest_art-0.1.0*
+twine upload --repository testpypi dist/crest_art-$VERSION*
 
 # Production
-twine upload dist/crest_art-0.1.0*
+twine upload dist/crest_art-$VERSION*
 ```
 
 Alternatively, automate via GitHub Actions (recommended for future releases).
@@ -75,9 +83,10 @@ jobs:
 
 1. Go to https://github.com/melancholysky/crest/releases
 2. Click "Draft a new release"
-3. Tag: `v0.1.0`
-4. Title: `crest v0.1.0 — Initial Release`
-5. Description (suggested):
+3. Tag: `v$VERSION`
+4. Title: `crest v$VERSION`
+5. Description (the v0.1.0 announcement below is a working example — update
+   the "What's New" list from `CHANGELOG.md` for each release):
 
    ```markdown
    **Generative terminal-art CLI** — First release!
@@ -104,7 +113,8 @@ jobs:
        crest render -p wave -c ember  # Static frame
        crest animate -p plasma        # Live animation
    ```
-6. Optionally attach `dist/crest_art-0.1.0.whl` and `crest_art-0.1.0.tar.gz`
+6. Optionally attach `dist/crest_art-$VERSION-py3-none-any.whl` and
+   `dist/crest_art-$VERSION.tar.gz`
 7. Publish
 
 ## 4. Verify installation
@@ -120,13 +130,19 @@ crest list
 crest render -p mandala -c rainbow -g ascii -w 40 -H 12
 ```
 
-From a downloaded wheel:
+From the built wheel — verifies the exact artifact produced in step 1, works
+before publishing, and does not depend on GitHub release assets:
 
 ```bash
-curl -L -O https://github.com/melancholysky/crest/releases/download/v0.1.0/crest_art-0.1.0-py3-none-any.whl
-pip install crest-art
+python3 -m venv /tmp/crest_wheel_test
+source /tmp/crest_wheel_test/bin/activate
+pip install "dist/crest_art-$VERSION-py3-none-any.whl"
 crest --version
 ```
+
+If you attached the distributions to the GitHub release (optional step in
+section 3), you can instead download the wheel from the release page and
+`pip install` that file.
 
 ## Package facts
 
@@ -154,20 +170,20 @@ You need a PyPI API token (https://pypi.org/manage/account/token/).
    - Value: your PyPI token (`pypi-AgEI...`)
 2. Ensure `.github/workflows/publish.yml` is in the repo (it ships in this
    folder).
-3. Push the `v0.1.0` tag — the workflow builds and uploads automatically:
+3. Push the `v$VERSION` tag — the workflow builds and uploads automatically:
    ```bash
-   git tag -a v0.1.0 -m "Release v0.1.0"
-   git push origin v0.1.0
+   git tag -a "v$VERSION" -m "Release v$VERSION"
+   git push origin "v$VERSION"
    ```
 
-### Option B — Manual upload (fastest for v1.0)
+### Option B — Manual upload (fastest for a one-off release)
 
 Run from this folder, feeding the token via an environment variable so it
 never lands in shell history:
 
 ```bash
 export PYPI_API_TOKEN="pypi-AgEI...your-token-here"
-twine upload --username __token__ --password "$PYPI_API_TOKEN" dist/crest_art-0.1.0*
+twine upload --username __token__ --password "$PYPI_API_TOKEN" dist/crest_art-$VERSION*
 unset PYPI_API_TOKEN
 ```
 
@@ -180,7 +196,7 @@ It builds from the PyPI sdist, so **publish to PyPI first**.
    ```bash
    cd aur
    # either download the sdist and run:
-   sha256sum crest_art-0.1.0.tar.gz
+   sha256sum crest_art-$VERSION.tar.gz
    # or let pkgconf fill it in:
    updpkgsums
    ```
@@ -202,12 +218,12 @@ It builds from the PyPI sdist, so **publish to PyPI first**.
 - [x] `pyproject.toml` carries PyPI metadata
 - [x] Distributions built (wheel + sdist)
 - [x] `twine check` passes
-- [ ] Published to PyPI
-- [ ] GitHub release created
+- [x] Published to PyPI
+- [x] GitHub release created
 
 ## Post-release maintenance
 
-- Monitor download stats at https://pypi.org/project/crest/
+- Monitor download stats at https://pypi.org/project/crest-art/
 - Respond to GitHub issues and pull requests
 - For bug fixes or features: bump the version in `__init__.py` and
   `pyproject.toml`, add `CHANGELOG.md` notes, rebuild, and re-upload.
