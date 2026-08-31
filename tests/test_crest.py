@@ -5,6 +5,7 @@ Covers the three layers independently:
   * colors     — clamping, gradient interpolation, map registry, ANSI output
   * render     — terminal string output (blocks + ascii) and PNG export
   * cli        — argument parsing, subcommand dispatch, error handling
+  * docs       — changelog entry agrees with the registries it describes
 
 Run with ``pytest`` from the project root.
 """
@@ -15,11 +16,13 @@ import argparse
 import importlib.util
 import io
 import os
+import re
 import shutil
 import sys
 
 import pytest
 
+import crest
 from crest import cli, colors, patterns, render, wizard
 
 
@@ -292,6 +295,46 @@ def test_no_subcommand_launches_wizard():
     parser = cli.build_parser()
     args = parser.parse_args([])
     assert getattr(args, "command", None) is None
+
+
+# --------------------------------------------------------------------------
+# docs
+# --------------------------------------------------------------------------
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _changelog_entry(version: str) -> str:
+    """Return the body of the ``## [version]`` section of ``CHANGELOG.md``."""
+    with io.open(os.path.join(_REPO_ROOT, "CHANGELOG.md"), encoding="utf-8") as fh:
+        text = fh.read()
+    start = text.index("## [{}]".format(version))
+    end = text.find("\n## [", start + 1)
+    return text[start:] if end == -1 else text[start:end]
+
+
+def _changelog_inventory(entry: str, label: str) -> tuple[int, list[str]]:
+    """Parse a ``- **N label**: a, b, c`` bullet into ``(count, names)``."""
+    match = re.search(r"- \*\*(\d+) " + re.escape(label) + r"\*\*: (.+)", entry)
+    assert match is not None, "no {!r} bullet in the changelog entry".format(label)
+    return int(match.group(1)), [name.strip() for name in match.group(2).split(",")]
+
+
+def test_changelog_entry_matches_registries():
+    """The entry for the version in the tree must match what the tree ships.
+
+    Guards the drift that let the 0.1.0 entry advertise 7 colour maps while
+    ``_COLOR_MAPS`` held 8.
+    """
+    entry = _changelog_entry(crest.__version__)
+
+    count, names = _changelog_inventory(entry, "parametric patterns")
+    assert names == patterns.list_patterns()
+    assert count == len(names)
+
+    count, names = _changelog_inventory(entry, "colour maps")
+    assert names == colors.list_color_maps()
+    assert count == len(names)
 
 
 # (shutil/sys imported at top so they are available to every test)
