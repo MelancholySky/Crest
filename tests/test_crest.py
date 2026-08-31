@@ -12,6 +12,7 @@ Run with ``pytest`` from the project root.
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import importlib.util
 import io
 import os
@@ -20,6 +21,7 @@ import sys
 
 import pytest
 
+import crest
 from crest import cli, colors, patterns, render, wizard
 
 
@@ -197,6 +199,28 @@ def test_export_without_pillow_exits_nonzero(monkeypatch, tmp_path):
 def test_main_dispatches_render():
     rc = cli.main(["render", "-p", "gradient", "-c", "mono", "-g", "ascii", "-w", "8", "-H", "3"])
     assert rc == 0
+
+
+def test_version_flag_reports_package_version(capsys):
+    """``--version`` must print the one version defined in ``crest``."""
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out == f"crest {crest.__version__}\n"
+
+
+def test_cli_version_is_not_a_second_copy():
+    """``crest.cli.__version__`` is a re-export, not its own literal."""
+    assert cli.__version__ is crest.__version__
+
+
+def test_packaging_metadata_matches_package_version():
+    """``pyproject.toml``'s version must track ``crest.__version__``."""
+    try:
+        installed = importlib.metadata.version("crest-art")
+    except importlib.metadata.PackageNotFoundError:
+        pytest.skip("crest-art is not installed; no packaging metadata to check")
+    assert installed == crest.__version__
 
 
 # --------------------------------------------------------------------------
