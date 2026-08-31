@@ -5,7 +5,7 @@ Covers the three layers independently:
   * colors     — clamping, gradient interpolation, map registry, ANSI output
   * render     — terminal string output (blocks + ascii) and PNG export
   * cli        — argument parsing, subcommand dispatch, error handling
-  * docs       — changelog entry agrees with the registries it describes
+  * docs       — the published changelog entry matches what that release shipped
 
 Run with ``pytest`` from the project root.
 """
@@ -22,7 +22,6 @@ import sys
 
 import pytest
 
-import crest
 from crest import cli, colors, patterns, render, wizard
 
 
@@ -303,37 +302,77 @@ def test_no_subcommand_launches_wizard():
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# What 0.1.0 actually shipped, taken from the registries at the ``v0.1.0`` tag.
+# These expectations are frozen on purpose: ``[0.1.0]`` describes a published
+# release, so it is a historical record rather than a live claim about the tree.
+_V0_1_0_PATTERNS = ["wave", "plasma", "gradient", "mandala", "ripple"]
+_V0_1_0_COLOR_MAPS = [
+    "mono", "ember", "fire", "ocean", "viridis", "rainbow", "ice", "matrix",
+]
+
+_FROZEN_ENTRY_HINT = (
+    "the [0.1.0] entry documents a published release and must keep describing "
+    "what 0.1.0 shipped; a pattern or colour map added since then belongs in "
+    "an [Unreleased] entry, not in this one"
+)
+
 
 def _changelog_entry(version: str) -> str:
-    """Return the body of the ``## [version]`` section of ``CHANGELOG.md``."""
+    """Return the body of the ``## [version]`` section of ``CHANGELOG.md``.
+
+    The heading must be a real heading: the pattern is anchored to the start of
+    a line, so prose that merely quotes ``## [0.1.0]`` mid-sentence does not
+    count. Anything other than exactly one such heading is an error rather
+    than a silent pass, so a renamed or duplicated entry cannot leave the
+    caller asserting against nothing.
+    """
     with io.open(os.path.join(_REPO_ROOT, "CHANGELOG.md"), encoding="utf-8") as fh:
         text = fh.read()
-    start = text.index("## [{}]".format(version))
-    end = text.find("\n## [", start + 1)
-    return text[start:] if end == -1 else text[start:end]
+    heading = re.compile(
+        r"^## \[" + re.escape(version) + r"\][^\n]*$", re.MULTILINE
+    )
+    starts = [match.start() for match in heading.finditer(text)]
+    assert len(starts) == 1, (
+        "expected exactly one '## [{}]' heading in CHANGELOG.md, found {}"
+        .format(version, len(starts))
+    )
+    following = re.compile(r"^## \[", re.MULTILINE).search(text, starts[0] + 1)
+    return text[starts[0]:following.start()] if following else text[starts[0]:]
 
 
 def _changelog_inventory(entry: str, label: str) -> tuple[int, list[str]]:
-    """Parse a ``- **N label**: a, b, c`` bullet into ``(count, names)``."""
-    match = re.search(r"- \*\*(\d+) " + re.escape(label) + r"\*\*: (.+)", entry)
-    assert match is not None, "no {!r} bullet in the changelog entry".format(label)
-    return int(match.group(1)), [name.strip() for name in match.group(2).split(",")]
+    """Parse the one ``- **N label**: a, b, c`` bullet of ``entry`` for ``label``.
 
-
-def test_changelog_entry_matches_registries():
-    """The entry for the version in the tree must match what the tree ships.
-
-    Guards the drift that let the 0.1.0 entry advertise 7 colour maps while
-    ``_COLOR_MAPS`` held 8.
+    Anchored to whole lines, and exactly one bullet must match: zero means the
+    inventory this test exists to check is not there to check, and more than
+    one means the entry contradicts itself. Both are failures.
     """
-    entry = _changelog_entry(crest.__version__)
+    bullet = re.compile(
+        r"^- \*\*(\d+) " + re.escape(label) + r"\*\*: ([^\n]+)$", re.MULTILINE
+    )
+    matches = bullet.findall(entry)
+    assert len(matches) == 1, (
+        "expected exactly one '{}' inventory bullet in the changelog entry, "
+        "found {}".format(label, len(matches))
+    )
+    count, listed = matches[0]
+    return int(count), [name.strip() for name in listed.split(",")]
+
+
+def test_changelog_0_1_0_entry_matches_released_inventory():
+    """``[0.1.0]`` must list the patterns and colour maps 0.1.0 shipped.
+
+    Guards the drift that let the entry advertise 7 colour maps and omit
+    ``matrix`` while the ``v0.1.0`` tag registered 8.
+    """
+    entry = _changelog_entry("0.1.0")
 
     count, names = _changelog_inventory(entry, "parametric patterns")
-    assert names == patterns.list_patterns()
+    assert names == _V0_1_0_PATTERNS, _FROZEN_ENTRY_HINT
     assert count == len(names)
 
     count, names = _changelog_inventory(entry, "colour maps")
-    assert names == colors.list_color_maps()
+    assert names == _V0_1_0_COLOR_MAPS, _FROZEN_ENTRY_HINT
     assert count == len(names)
 
 
