@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial release of **crest**: a generative terminal-art CLI
 - **5 parametric patterns**: wave, plasma, gradient, mandala, ripple
-- **7 colour maps**: mono, ember, fire, ocean, viridis, rainbow, ice
+- **8 colour maps**: mono, ember, fire, ocean, viridis, rainbow, ice, matrix
 - **2 glyph styles**: Unicode blocks (shaded) and ASCII ramp
 - **Live animation** with `animate` command
 - **PNG export** via `export` command (optional Pillow dependency)

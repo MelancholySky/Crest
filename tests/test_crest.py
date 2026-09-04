@@ -5,6 +5,7 @@ Covers the three layers independently:
   * colors     — clamping, gradient interpolation, map registry, ANSI output
   * render     — terminal string output (blocks + ascii) and PNG export
   * cli        — argument parsing, subcommand dispatch, error handling
+  * docs       — the published [0.1.0] entry still lists what that release shipped
 
 Run with ``pytest`` from the project root.
 """
@@ -292,6 +293,43 @@ def test_no_subcommand_launches_wizard():
     parser = cli.build_parser()
     args = parser.parse_args([])
     assert getattr(args, "command", None) is None
+
+
+# --------------------------------------------------------------------------
+# docs
+# --------------------------------------------------------------------------
+
+_CHANGELOG = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "CHANGELOG.md"
+)
+
+# The inventory lines of the ``[0.1.0]`` changelog entry, frozen as literals.
+# That entry records what 0.1.0 published — these five patterns and eight
+# colour maps, as registered at the ``v0.1.0`` tag — so it is history, not a
+# live claim about the tree. A pattern or colour map added afterwards belongs
+# in an ``[Unreleased]`` entry and must never be appended to these lines.
+_V0_1_0_INVENTORY_LINES = (
+    "- **5 parametric patterns**: wave, plasma, gradient, mandala, ripple",
+    "- **8 colour maps**: mono, ember, fire, ocean, viridis, rainbow, ice, matrix",
+)
+
+
+def test_changelog_0_1_0_inventory_lines_are_intact():
+    """Guard the drift that let ``[0.1.0]`` claim 7 colour maps, omitting ``matrix``.
+
+    A whole-line literal match on purpose: the released inventory is fixed, so
+    there is nothing to parse here and no version to track.
+    """
+    with open(_CHANGELOG, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    for expected in _V0_1_0_INVENTORY_LINES:
+        assert lines.count(expected) == 1, (
+            "CHANGELOG.md must contain exactly one line reading:\n"
+            "  {}\n"
+            "It records what 0.1.0 shipped; a pattern or colour map added "
+            "since then belongs in an [Unreleased] entry, not in [0.1.0]."
+            .format(expected)
+        )
 
 
 # (shutil/sys imported at top so they are available to every test)
