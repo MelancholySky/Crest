@@ -13,14 +13,18 @@ Run with ``pytest`` from the project root.
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import importlib.util
 import io
 import os
+import pathlib
+import re
 import shutil
 import sys
 
 import pytest
 
+import crest
 from crest import cli, colors, patterns, render, wizard
 
 
@@ -198,6 +202,107 @@ def test_export_without_pillow_exits_nonzero(monkeypatch, tmp_path):
 def test_main_dispatches_render():
     rc = cli.main(["render", "-p", "gradient", "-c", "mono", "-g", "ascii", "-w", "8", "-H", "3"])
     assert rc == 0
+
+
+def test_version_flag_reports_package_version(capsys):
+    """``--version`` must print the one version defined in ``crest``."""
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out == f"crest {crest.__version__}\n"
+
+
+def test_cli_version_is_not_a_second_copy():
+    """``crest.cli.__version__`` is a re-export, not its own literal."""
+    assert cli.__version__ is crest.__version__
+
+
+# ``pyproject.toml`` carries the packaging copy of the version, so it can drift
+# from ``crest.__version__``. Read it from the source tree next to this file --
+# not the working directory -- so the check below holds wherever pytest runs.
+PYPROJECT_PATH = pathlib.Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+_TABLE_HEADER_RE = re.compile(r"^\[\s*([^\[\]]+?)\s*\]$")
+_VERSION_RE = re.compile(r"""^version\s*=\s*(["'])([^"']+)\1\s*(?:#.*)?$""")
+
+
+def _pyproject_version(path: pathlib.Path):
+    """Return the version declared in ``pyproject.toml``'s ``[project]`` table.
+
+    A deliberately narrow line scan rather than a TOML parse: crest supports
+    Python 3.8, where ``tomllib`` does not exist, and takes no third-party
+    dependencies -- test-only ones included. Only a quoted ``version`` key
+    inside ``[project]`` counts, so a ``version`` in another table or a
+    commented-out line cannot satisfy it. Returns ``None`` if there is none.
+    """
+    table = None
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("["):
+            header = _TABLE_HEADER_RE.match(line)
+            # An unparseable header (e.g. ``[[array.of.tables]]``) leaves no
+            # known table, so its keys are never read as ``[project]``'s.
+            table = header.group(1) if header else None
+            continue
+        if table != "project":
+            continue
+        match = _VERSION_RE.match(line)
+        if match:
+            return match.group(2)
+    return None
+
+
+def test_pyproject_version_matches_package_version():
+    """The packaging version must track ``crest.__version__``.
+
+    A release bump that touches only one of the two files fails here instead
+    of shipping a distribution whose metadata contradicts ``crest --version``.
+    """
+    if not PYPROJECT_PATH.is_file():
+        # No source tree — the suite is running against an installed package.
+        # Fall back to that distribution's baked-in metadata so the invariant
+        # is still checked rather than skipped.
+        installed = importlib.metadata.version("crest-art")
+        assert installed == crest.__version__, (
+            f"installed crest-art metadata says {installed!r} but "
+            f"crest.__version__ says {crest.__version__!r}"
+        )
+        return
+
+    declared = _pyproject_version(PYPROJECT_PATH)
+    assert declared is not None, (
+        f"no quoted version key found in [project] of {PYPROJECT_PATH}"
+    )
+    assert declared == crest.__version__, (
+        f"{PYPROJECT_PATH.name} declares version {declared!r} but "
+        f"crest.__version__ says {crest.__version__!r}; bump both "
+        f"(see RELEASE.md, 'Post-release maintenance')"
+    )
+
+
+def test_pyproject_version_reader_ignores_other_tables_and_comments(tmp_path):
+    """The scan must not be satisfied by a decoy version key."""
+    toml = tmp_path / "pyproject.toml"
+    toml.write_text(
+        "[build-system]\n"
+        'version = "9.9.9"\n'
+        "\n"
+        "[project]\n"
+        '# version = "8.8.8"\n'
+        'name = "crest-art"\n'
+        '  version = "1.2.3"  # indentation and trailing comments are fine\n'
+        "\n"
+        "[tool.other]\n"
+        'version = "7.7.7"\n',
+        encoding="utf-8",
+    )
+    assert _pyproject_version(toml) == "1.2.3"
+
+
+def test_pyproject_version_reader_returns_none_when_absent(tmp_path):
+    toml = tmp_path / "pyproject.toml"
+    toml.write_text('[project]\nname = "crest-art"\n', encoding="utf-8")
+    assert _pyproject_version(toml) is None
 
 
 # --------------------------------------------------------------------------

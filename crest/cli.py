@@ -17,9 +17,10 @@ import sys
 import time
 from typing import List, Optional
 
-from . import colors, patterns, render, wizard
-
-__version__ = "0.1.0"
+# ``__version__`` is defined once, in ``crest/__init__.py``. Importing it here
+# keeps ``crest --version`` in step with the package (and keeps the historical
+# ``crest.cli.__version__`` name working for callers that import it).
+from . import __version__, colors, patterns, render, wizard
 
 # Glyph modes understood by the terminal renderer.
 GLYPH_MODES = ("blocks", "ascii")

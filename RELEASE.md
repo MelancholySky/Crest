@@ -225,8 +225,10 @@ It builds from the PyPI sdist, so **publish to PyPI first**.
 
 - Monitor download stats at https://pypi.org/project/crest-art/
 - Respond to GitHub issues and pull requests
-- For bug fixes or features: bump the version in `__init__.py` and
-  `pyproject.toml`, add `CHANGELOG.md` notes, rebuild, and re-upload.
+- For bug fixes or features: bump the version in `crest/__init__.py` — the
+  single source of truth that `crest --version` reports — and in
+  `pyproject.toml`, which the packaging metadata reads. No other file carries
+  the version. Then add `CHANGELOG.md` notes, rebuild, and re-upload.
 
 ## Credits
 
