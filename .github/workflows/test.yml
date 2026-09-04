@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Pinned rather than ubuntu-latest: the matrix floor is Python 3.8, and
+    # actions/setup-python has no 3.8 build for Ubuntu 26.04, which
+    # ubuntu-latest will eventually point at.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every version claimed by the classifiers in pyproject.toml.
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13', '3.14']
+    steps:
+      # Actions are pinned to immutable commit SHAs, not mutable major-version
+      # tags: a retag upstream would otherwise silently change what runs here.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package and test dependencies
+        run: pip install -e ".[png]" pytest
+      - name: Run test suite
+        run: python3 -m pytest -q
