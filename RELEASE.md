@@ -99,7 +99,7 @@ jobs:
    - PNG export (optional, with Pillow)
    - Interactive wizard for guided discovery
    - Zero core dependencies
-   - 30 tests
+   - 36 tests
 
    ## Installation
        pip install crest-art          # Core (no dependencies)
@@ -210,7 +210,7 @@ It builds from the PyPI sdist, so **publish to PyPI first**.
 
 ## Pre-release checklist
 
-- [x] Code tested (30/30 tests passing)
+- [x] Code tested (36/36 tests passing)
 - [x] Version consistent in `__init__.py` and `pyproject.toml`
 - [x] `CHANGELOG.md` created
 - [x] `.gitignore` configured

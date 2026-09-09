@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PNG export** via `export` command (optional Pillow dependency)
 - **Interactive wizard** for guided setup and discovery
 - **Zero core dependencies** — runs on any Python 3.8+ install
-- Comprehensive test suite (30 tests)
+- Comprehensive test suite (36 tests)
 - Shell integration helpers (fish and sh launchers)
 - Full CLI documentation and usage examples
 
