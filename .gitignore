@@ -136,3 +136,6 @@ crest.png
 *.swo
 *~
 .DS_Store
+
+# Local release/build output (not part of the source tree)
+release/
