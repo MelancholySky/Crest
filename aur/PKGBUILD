@@ -2,7 +2,7 @@
 # AUR package: crest-art
 
 pkgname=crest-art
-pkgver=0.1.0
+pkgver=0.1.1
 pkgrel=1
 pkgdesc="Generative terminal-art CLI — render animated parametric patterns with ANSI truecolour"
 arch=('any')
@@ -12,7 +12,7 @@ depends=('python')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
 optdepends=('python-pillow: PNG export support')
 source=("https://files.pythonhosted.org/packages/source/c/crest-art/crest_art-$pkgver.tar.gz")
-sha256sums=('4123d2e698e45a2e24593853afb5d2ed87a6606a93026a8414c1e0e7f0e97f12')
+sha256sums=('e66642a8615933ae573093492426ec0a0fa270eb32031cf2d284f272994ba151')
 
 build() {
   cd "crest_art-$pkgver"
