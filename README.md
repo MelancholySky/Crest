@@ -68,8 +68,8 @@ crest {render|animate|export|list|wizard} [options]
 | `-p, --pattern` | `wave` | Pattern name |
 | `-c, --color` | `ember` | Colour map name |
 | `-g, --glyph` | `blocks` | `blocks` or `ascii` |
-| `-w, --width` | terminal width | Width in cells |
-| `-H, --height` | terminal height − 2 | Height in cells |
+| `-w, --width` | terminal width | Width in cells (max 4096 per axis, 1,000,000 total) |
+| `-H, --height` | terminal height − 2 | Height in cells (same caps as width) |
 
 ### Per-command options
 
@@ -80,7 +80,7 @@ crest {render|animate|export|list|wizard} [options]
 | `animate` | `-s, --speed FLOAT` | Phase advance per frame |
 | `animate` | `-d, --delay FLOAT` | Seconds per frame |
 | `export` | `-o, --output PATH` | PNG path (default `crest.png`) |
-| `export` | `-s, --scale INT` | Pixels per cell (`20` → 20×20 px per cell) |
+| `export` | `-s, --scale INT` | Pixels per cell, 1–512 (`20` → 20×20 px per cell) |
 
 ### Examples
 
@@ -162,7 +162,7 @@ Crest/
 │   ├── cli.py         # argparse interface
 │   └── wizard.py      # interactive setup
 ├── tests/
-│   └── test_crest.py  # 38 tests
+│   └── test_crest.py  # 57 tests
 ├── aur/               # PKGBUILD
 ├── pyproject.toml
 └── LICENSE
@@ -176,8 +176,8 @@ python3 -m pytest -q
 crest --version
 ```
 
-38 tests cover patterns, colour maps, renderers, and the CLI. Contributions
-are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+57 tests cover patterns, colour maps, renderers, the CLI, the wizard, and the
+shell helpers. Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security
 

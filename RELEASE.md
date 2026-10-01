@@ -50,34 +50,9 @@ twine upload dist/crest_art-$VERSION*
 ```
 
 Alternatively, automate via GitHub Actions (recommended for future releases).
-Create `.github/workflows/publish.yml`:
-
-```yaml
-name: Publish to PyPI
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - name: Install build tools
-        run: pip install build twine
-      - name: Build distributions
-        run: python -m build
-      - name: Publish to PyPI
-        run: twine upload dist/*
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-```
+The workflow ships with the repo at `.github/workflows/publish.yml` — copy it
+as-is (it pins its actions to commit SHAs and gates the build on the test
+suite); do not retype it by hand. See Option A below for the token setup.
 
 ## 3. Create a GitHub release
 
@@ -192,15 +167,19 @@ unset PYPI_API_TOKEN
 An AUR `PKGBUILD` lives in `aur/` (and is excluded from the PyPI sdist).
 It builds from the PyPI sdist, so **publish to PyPI first**.
 
+0. Bump the AUR package version: edit `pkgver=` in `aur/PKGBUILD`, then
+   regenerate `aur/.SRCINFO` (`makepkg --printsrcinfo > .SRCINFO` inside
+   `aur/`).
 1. After PyPI publish, compute the sdist checksum:
    ```bash
    cd aur
    # either download the sdist and run:
    sha256sum crest_art-$VERSION.tar.gz
-   # or let pkgconf fill it in:
+   # or let pacman-contrib fill it in:
    updpkgsums
    ```
-2. Replace `sha256sums=('SKIP')` with the real hash.
+2. Update `sha256sums=` in `aur/PKGBUILD` with the real hash of the published
+   sdist (and regenerate `.SRCINFO` again if you edited it after step 0).
 3. Verify it builds locally:
    ```bash
    cd aur && makepkg -si
@@ -210,7 +189,7 @@ It builds from the PyPI sdist, so **publish to PyPI first**.
 
 ## Pre-release checklist
 
-- [x] Code tested (36/36 tests passing)
+- [x] Code tested (57/57 tests passing)
 - [x] Version consistent in `__init__.py` and `pyproject.toml`
 - [x] `CHANGELOG.md` created
 - [x] `.gitignore` configured
@@ -227,8 +206,10 @@ It builds from the PyPI sdist, so **publish to PyPI first**.
 - Respond to GitHub issues and pull requests
 - For bug fixes or features: bump the version in `crest/__init__.py` — the
   single source of truth that `crest --version` reports — and in
-  `pyproject.toml`, which the packaging metadata reads. No other file carries
-  the version. Then add `CHANGELOG.md` notes, rebuild, and re-upload.
+  `pyproject.toml`, which the packaging metadata reads. The AUR package also
+  carries the version (`pkgver` in `aur/PKGBUILD`, mirrored in
+  `aur/.SRCINFO`) — update both when re-publishing there. Then add
+  `CHANGELOG.md` notes, rebuild, and re-upload.
 
 ## Credits
 

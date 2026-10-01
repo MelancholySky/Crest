@@ -17,6 +17,12 @@ from .patterns import Grid
 # block whose shade reflects intensity when glyph mode is "blocks".
 _SHADE_BLOCKS = " ░▒▓█"
 
+# Caps for the PNG renderer: one bad ``scale`` must not turn into a multi-
+# gigabyte allocation (SECURITY.md keeps pathological dimensions in scope).
+MAX_PNG_SCALE = 512
+MAX_PNG_AXIS = 32768
+MAX_PNG_PIXELS = 64 * 1024 * 1024
+
 
 def _sample_map(grid: Grid, color_map: colors.ColorMapFn):
     """Pre-compute an RGB value for every cell of ``grid``."""
@@ -77,7 +83,8 @@ def render_png(
 
     ``scale`` multiplies each cell into an ``scale x scale`` block of pixels, so
     e.g. ``scale=20`` turns a 40x12 grid into an 800x240 image. Raises
-    ``ImportError`` if Pillow is not installed.
+    ``ImportError`` if Pillow is not installed, and ``ValueError`` when the
+    requested scale or resulting image size exceeds the module caps.
     """
     try:
         from PIL import Image
@@ -91,7 +98,15 @@ def render_png(
     width = max((len(r) for r in grid), default=0)
     height = len(grid)
     scale = max(1, int(scale))
-    img = Image.new("RGB", (width * scale, height * scale))
+    if scale > MAX_PNG_SCALE:
+        raise ValueError(f"scale {scale} is too large (max {MAX_PNG_SCALE})")
+    px_w, px_h = width * scale, height * scale
+    if px_w > MAX_PNG_AXIS or px_h > MAX_PNG_AXIS or px_w * px_h > MAX_PNG_PIXELS:
+        raise ValueError(
+            f"image would be {px_w}x{px_h} px, over the "
+            f"{MAX_PNG_AXIS}-per-axis / {MAX_PNG_PIXELS}-pixel cap"
+        )
+    img = Image.new("RGB", (px_w, px_h))
     px = img.load()
     for y, row in enumerate(grid):
         for x, v in enumerate(row):

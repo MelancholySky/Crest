@@ -8,7 +8,7 @@ VENV="$DIR/.venv"
 if [ ! -d "$VENV" ]; then
     echo "First run: creating virtual environment in $VENV"
     python3 -m venv "$VENV"
-    "$VENV/bin/pip" install -e . --quiet
+    "$VENV/bin/pip" install -e "$DIR" --quiet
 fi
 
 exec "$VENV/bin/crest" "$@"

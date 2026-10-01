@@ -17,6 +17,7 @@ philosophy):
 
 from __future__ import annotations
 
+import math
 import sys
 import time
 from typing import Callable, Dict, List, Optional, TextIO
@@ -125,14 +126,18 @@ def build_run_options(prompt, display) -> RunOptions:
             "Animation speed — phase per frame (blank = 0.15):", 0.15, prompt, display
         )
         opts["delay"] = _ask_float(
-            "Frame delay in seconds (blank = 0.05):", 0.05, prompt, display
+            "Frame delay in seconds (blank = 0.05):", 0.05, prompt, display, minimum=0.0
         )
-    # Step 5: size.
+    # Step 5: size. (Deferred import: crest.cli imports this module at load
+    # time, so pulling the cap here avoids a circular import.)
+    from .cli import MAX_CELLS_PER_AXIS
     opts["width"] = _ask_int(
-        "Width in cells (blank = terminal width):", None, prompt, display
+        "Width in cells (blank = terminal width):", None, prompt, display,
+        maximum=MAX_CELLS_PER_AXIS,
     )
     opts["height"] = _ask_int(
-        "Height in cells (blank = terminal height - 2):", None, prompt, display
+        "Height in cells (blank = terminal height - 2):", None, prompt, display,
+        maximum=MAX_CELLS_PER_AXIS,
     )
     return opts
 
@@ -142,14 +147,23 @@ def _ask_int(
     default: Optional[int],
     prompt: Callable[[str], str],
     display: Callable[[str], None],
+    maximum: Optional[int] = None,
 ) -> Optional[int]:
-    """Prompt for an optional integer; blank returns ``default``."""
+    """Prompt for an optional integer; blank returns ``default``.
+
+    Values over ``maximum`` (when given) re-prompt rather than slipping
+    through to the renderer's size caps.
+    """
     while True:
         raw = prompt(f"{title} ").strip()
         if raw == "":
             return default
         if raw.isdigit():
-            return int(raw)
+            value = int(raw)
+            if maximum is not None and value > maximum:
+                display(f"  Please enter a number up to {maximum}, or leave blank.")
+                continue
+            return value
         display("  Please enter a number, or leave blank.")
 
 
@@ -158,16 +172,29 @@ def _ask_float(
     default: float,
     prompt: Callable[[str], str],
     display: Callable[[str], None],
+    minimum: Optional[float] = None,
 ) -> float:
-    """Prompt for an optional float; blank returns ``default``."""
+    """Prompt for an optional float; blank returns ``default``.
+
+    Rejects non-finite values (``inf`` / ``nan`` parse as floats) and, when
+    ``minimum`` is given, values below it.
+    """
     while True:
         raw = prompt(f"{title} ").strip()
         if raw == "":
             return default
         try:
-            return float(raw)
+            value = float(raw)
         except ValueError:
             display("  Please enter a number, or leave blank.")
+            continue
+        if not math.isfinite(value):
+            display("  Please enter a finite number, or leave blank.")
+            continue
+        if minimum is not None and value < minimum:
+            display(f"  Please enter a number >= {minimum:g}, or leave blank.")
+            continue
+        return value
 
 
 def command_for_options(opts: RunOptions) -> str:
@@ -193,34 +220,47 @@ def run_wizard(
     prompt: Optional[Callable[[str], str]] = None,
     display: Optional[Callable[[str], None]] = None,
     animate: bool = False,
+    stream: Optional[TextIO] = None,
 ) -> int:
     """Run the wizard end-to-end against the real terminal by default.
 
-    ``prompt`` and ``display`` can be injected for testing. When finished, the
-    user may preview the pattern live or just copy the command.
+    ``prompt`` and ``display`` can be injected for testing, as can ``stream``
+    (the sink for preview frames — the terminal by default). When finished,
+    the user may preview the pattern live or just copy the command.
     """
     prompt = prompt or (lambda msg: input(msg))
-    stream: TextIO = sys.stdout
+    stream = stream or sys.stdout
     display = display or (lambda msg: stream.write(msg + "\n"))
 
-    opts = build_run_options(prompt, display)
+    try:
+        opts = build_run_options(prompt, display)
+    except (EOFError, KeyboardInterrupt):
+        # Ctrl+D / Ctrl+C at any prompt ends the wizard cleanly.
+        display("\nCancelled.")
+        return 0
 
     color_fn = colors.get_color_map(str(opts["color"]))
-    width = int(opts.get("width") or 80)
-    height = int(opts.get("height") or 24)
+    # Resolve the size exactly like the CLI does so the live preview always
+    # matches the "Equivalent command" printed below. (Deferred import for
+    # the same circular-import reason as in build_run_options.)
+    from .cli import resolve_size
+    width, height = resolve_size(opts.get("width"), opts.get("height"))
     pat = patterns.get_pattern(str(opts["pattern"]))
 
     if opts.get("action") == "animate":
-        # Play the animation live, then show the reusable command.
-        speed = float(opts.get("speed") or 0.15)
-        delay = float(opts.get("delay") or 0.05)
+        # Play the animation live, then show the reusable command. The
+        # `is not None` checks mirror command_for_options, so a 0 the user
+        # typed is honoured as 0 — the preview must never silently
+        # substitute the default behind the printed command's back.
+        speed = float(opts["speed"]) if opts.get("speed") is not None else 0.15
+        delay = float(opts["delay"]) if opts.get("delay") is not None else 0.05
         display("\nPlaying animation — press Ctrl+C to stop.\n")
         try:
             t = 0.0
             while True:
                 grid = pat.render(width, height, time=t)
                 stream.write("\x1b[2J\x1b[H")
-                render.render_terminal(grid, color_map=color_fn, glyph=str(opts["glyph"]))
+                render.render_terminal(grid, color_map=color_fn, glyph=str(opts["glyph"]), out=stream)
                 time.sleep(delay)
                 t += speed
         except KeyboardInterrupt:
@@ -230,7 +270,7 @@ def run_wizard(
         display("Preview:")
         display("-" * 56)
         grid = pat.render(width, height)
-        render.render_terminal(grid, color_map=color_fn, glyph=str(opts["glyph"]))
+        render.render_terminal(grid, color_map=color_fn, glyph=str(opts["glyph"]), out=stream)
         display("")
 
     display("Equivalent command (copy & reuse anytime):")

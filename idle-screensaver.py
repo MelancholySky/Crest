@@ -16,20 +16,53 @@ Press Ctrl+C or any key to cancel/exit the screensaver.
 from __future__ import annotations
 
 import argparse
+import getpass
+import os
 import subprocess
 import sys
 import time
-from pathlib import Path
+
+
+def parse_who_idle(text: str, user: str) -> int:
+    """Parse `who -u` output and return the user's idle time in seconds.
+
+    Fields per line: USER LINE DATE TIME IDLE PID [COMMENT].
+    The user is only idle when ALL their pts/tty sessions are idle, so
+    the smallest idle time among their sessions is returned. Returns 0
+    if the user has no pts/tty session. Malformed lines are skipped.
+    """
+    smallest = None
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+        if parts[0] != user or not parts[1].startswith(("pts", "tty")):
+            continue
+        idle_field = parts[4]
+        try:
+            if idle_field == ".":
+                seconds = 0
+            elif idle_field == "old":
+                seconds = 86400  # idle for over 24 hours
+            elif ":" in idle_field:
+                hours, minutes = idle_field.split(":", 1)
+                seconds = int(hours) * 3600 + int(minutes) * 60
+            else:
+                continue
+        except ValueError:
+            continue
+        if smallest is None or seconds < smallest:
+            smallest = seconds
+    return smallest if smallest is not None else 0
 
 
 def get_idle_time() -> float:
     """Get terminal idle time in seconds (Linux/Unix).
-    
-    Uses 'who' command to check when the terminal was last active.
+
+    Uses 'who -u' output for the current user's sessions.
     Falls back to 0 if unable to determine.
     """
     try:
-        import os
         result = subprocess.run(
             ["who", "-u"],
             capture_output=True,
@@ -37,18 +70,8 @@ def get_idle_time() -> float:
             timeout=1,
         )
         if result.returncode == 0:
-            for line in result.stdout.split("\n"):
-                if "pts" in line or "tty" in line:
-                    parts = line.split()
-                    if len(parts) > 2:
-                        try:
-                            idle_str = parts[-1]
-                            if idle_str == "." or ":" not in idle_str:
-                                return 0
-                            hours, minutes = idle_str.split(":")
-                            return int(hours) * 3600 + int(minutes) * 60
-                        except (ValueError, IndexError):
-                            pass
+            user = os.environ.get("USER") or getpass.getuser()
+            return parse_who_idle(result.stdout, user)
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
     return 0
@@ -103,7 +126,7 @@ Examples:
         "--idle-time",
         type=int,
         default=300,
-        help="Idle time before screensaver (seconds, default 300/5min)",
+        help="Idle time before screensaver (seconds, minimum 1, default 300/5min)",
     )
     parser.add_argument(
         "--pattern",
@@ -129,6 +152,9 @@ Examples:
     )
 
     args = parser.parse_args()
+    if args.idle_time < 1:
+        print("error: --idle-time must be at least 1 second", file=sys.stderr)
+        sys.exit(2)
 
     print(f"Idle screensaver active (idle timeout: {args.idle_time}s)")
     print("Press Ctrl+C to exit monitoring")

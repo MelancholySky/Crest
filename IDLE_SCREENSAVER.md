@@ -31,7 +31,7 @@ Press **Ctrl+C** to stop monitoring, or press **Ctrl+C** during the screensaver 
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--idle-time SECONDS` | 300 | Idle time before screensaver triggers (seconds) |
+| `--idle-time SECONDS` | 300 | Idle time before screensaver triggers (seconds, minimum 1) |
 | `--pattern PATTERN` | plasma | Pattern to display: wave, plasma, ripple, gradient, mandala |
 | `--color COLOR` | matrix | Colour map: matrix, ocean, fire, rainbow, viridis, etc. |
 | `--speed SPEED` | 0.08 | Animation speed (higher = faster) |
@@ -96,6 +96,8 @@ python3 idle-screensaver.py --pattern gradient --color rainbow --speed 0.1 --del
 
 ### Known Limitations
 - Idle time detection is based on system-level terminal activity
+- `who` reports `.` until the 1-minute boundary, so thresholds below 60
+  seconds are ineffective — use `--idle-time 60` or higher
 - SSH sessions may not report idle time accurately
 - Some terminal emulators may not integrate perfectly with `who` command
 

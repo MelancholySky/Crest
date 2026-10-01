@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -305,6 +306,110 @@ def test_pyproject_version_reader_returns_none_when_absent(tmp_path):
     toml.write_text('[project]\nname = "crest-art"\n', encoding="utf-8")
     assert _pyproject_version(toml) is None
 
+# --------------------------------------------------------------------------
+# cli input validation & bounds
+# --------------------------------------------------------------------------
+
+
+def test_nonfinite_time_is_rejected():
+    # `nan` / `inf` / `1e999` all parse as floats; they must die at argparse.
+    for bad in ("nan", "inf", "-inf", "1e999"):
+        with pytest.raises(SystemExit) as exc:
+            cli.build_parser().parse_args(["render", "-t", bad])
+        assert exc.value.code == 2
+
+
+def test_huge_phase_is_rejected():
+    # Finite but over the bound: ripple's `time * 2.0` would overflow to inf
+    # and die inside math.sin.
+    with pytest.raises(SystemExit) as exc:
+        cli.build_parser().parse_args(["render", "-p", "ripple", "-t", "1e308"])
+    assert exc.value.code == 2
+
+
+def test_negative_delay_is_rejected():
+    # time.sleep(-1) used to escape as a raw ValueError traceback.
+    with pytest.raises(SystemExit) as exc:
+        cli.build_parser().parse_args(["animate", "-d", "-1"])
+    assert exc.value.code == 2
+
+
+def test_phase_bound_is_inclusive():
+    args = cli.build_parser().parse_args(["render", "-t", "1e9"])
+    assert args.time == 1e9
+
+
+def test_scale_argument_is_bounded():
+    for bad in ("0", "-3", "600"):
+        with pytest.raises(SystemExit) as exc:
+            cli.build_parser().parse_args(["export", "-s", bad])
+        assert exc.value.code == 2
+    assert cli.build_parser().parse_args(["export", "-s", "512"]).scale == 512
+
+
+def test_resolve_size_caps(monkeypatch):
+    monkeypatch.setattr(shutil, "get_terminal_size", lambda *a, **k: os.terminal_size((80, 24)))
+    assert cli.resolve_size(4096, 1) == (4096, 1)  # per-axis boundary passes
+    with pytest.raises(SystemExit) as exc:
+        cli.resolve_size(4097, 1)  # one over the per-axis cap
+    assert exc.value.code == 2
+    with pytest.raises(SystemExit) as exc:
+        cli.resolve_size(2000, 600)  # under the per-axis cap, but 1.2M cells
+    assert exc.value.code == 2
+
+
+def test_render_huge_width_exits_cleanly(capsys):
+    # A mistyped dimension must produce a usage error, not an OOM attempt
+    # (the DoS class SECURITY.md keeps in scope).
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["render", "-w", "100000000"])
+    assert exc.value.code == 2
+    assert "too large" in capsys.readouterr().err
+
+
+def test_export_unwritable_path_exits_cleanly(tmp_path):
+    if importlib.util.find_spec("PIL") is None:
+        pytest.skip("Pillow not installed")
+    args = cli.build_parser().parse_args(
+        ["export", "-o", str(tmp_path / "missing" / "x.png"), "-w", "4", "-H", "2"]
+    )
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_export(args)
+    assert exc.value.code == 2
+
+
+def test_render_png_scale_cap_raises(tmp_path):
+    if importlib.util.find_spec("PIL") is None:
+        pytest.skip("Pillow not installed")
+    with pytest.raises(ValueError):
+        render.render_png(patterns.gradient(4, 2), str(tmp_path / "x.png"), scale=600)
+
+
+def test_clamp_pins_nan_to_floor():
+    assert patterns._clamp(float("nan")) == 0.0
+    assert patterns._clamp(1e18) == 1.0
+    assert patterns._clamp(-1e18) == 0.0
+
+
+def test_animate_loop_runs_and_stops_cleanly(monkeypatch, capsys):
+    """cmd_animate must actually run — no test invoked it before this audit."""
+    delays = []
+
+    def fake_sleep(seconds):
+        delays.append(seconds)
+        if len(delays) >= 3:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    args = cli.build_parser().parse_args(
+        ["animate", "-p", "wave", "-w", "8", "-H", "3", "-d", "0.01"]
+    )
+    assert cli.cmd_animate(args) == 0
+    assert delays == [0.01, 0.01, 0.01]
+    out = capsys.readouterr().out
+    assert out.count("\x1b[2J\x1b[H") == 3
+    assert "stopped." in out
+
 
 # --------------------------------------------------------------------------
 # wizard
@@ -326,8 +431,8 @@ class _FakeIO:
 
 
 def test_build_run_options_defaults_to_custom():
-    # preset + pattern + color + glyph + action + 2 sizes
-    io = _FakeIO(["", "", "", "", "", "", "", ""])
+    # preset + pattern + color + glyph + action + 2 sizes = 7 prompts
+    io = _FakeIO(["", "", "", "", "", "", ""])
     opts = wizard.build_run_options(io.prompt, io.display)
     assert opts["pattern"] in patterns.list_patterns()
     assert opts["color"] in colors.list_color_maps()
@@ -385,20 +490,89 @@ def test_command_for_options_omits_blank_size():
 def test_wizard_preview_runs_headless():
     # preset(blank)=custom, pattern(blank), color(blank), glyph(blank),
     # action(blank)=render, speed/delay skipped, sizes 30x10.
-    io = _FakeIO(["", "", "", "", "", "30", "10"])
-    rc = wizard.run_wizard(prompt=io.prompt, display=io.display)
+    fake_io = _FakeIO(["", "", "", "", "", "30", "10"])
+    stream = io.StringIO()
+    rc = wizard.run_wizard(prompt=fake_io.prompt, display=fake_io.display, stream=stream)
     assert rc == 0
-    assert any("Equivalent command" in line for line in io.lines)
+    assert any("Equivalent command" in line for line in fake_io.lines)
+    # The preview frame must land in the injected stream, not leak to stdout.
+    frame = stream.getvalue()
+    assert len(frame.splitlines()) == 10
+    assert "\x1b[48;2;" in frame
 
 
-def test_no_subcommand_launches_wizard():
-    # main() with no args should route to the wizard (returns 0 headlessly
-    # when we inject IO via the wizard default path is not possible here, so
-    # we assert argparse yields no command and main dispatches to wizard).
+def test_no_subcommand_launches_wizard(monkeypatch):
+    # main([]) must actually dispatch into the wizard — asserting the parse
+    # alone overstated this before. A stub keeps the terminal out of it.
     from crest import cli
-    parser = cli.build_parser()
-    args = parser.parse_args([])
+
+    args = cli.build_parser().parse_args([])
     assert getattr(args, "command", None) is None
+
+    seen = {}
+    monkeypatch.setattr(cli.wizard, "run_wizard", lambda *a, **k: seen.setdefault("called", 7))
+    assert cli.main([]) == 7
+    assert "called" in seen
+
+
+def test_wizard_cancelled_on_eof():
+    # Ctrl+D at the very first prompt used to escape as a raw EOFError.
+    def eof_prompt(msg):
+        raise EOFError
+
+    lines = []
+    assert wizard.run_wizard(prompt=eof_prompt, display=lines.append) == 0
+    assert any("Cancelled" in line for line in lines)
+
+
+def test_wizard_cancelled_on_interrupt_at_prompt():
+    def interrupting_prompt(msg):
+        raise KeyboardInterrupt
+
+    lines = []
+    assert wizard.run_wizard(prompt=interrupting_prompt, display=lines.append) == 0
+    assert any("Cancelled" in line for line in lines)
+
+
+def test_wizard_preview_matches_command_for_zero_speed_and_delay(monkeypatch):
+    # Entering 0 must be honoured everywhere: the preview used to fall back
+    # to the 0.15/0.05 defaults while the printed command said `-s 0.0 -d 0.0`,
+    # so the taught command busy-looped instead of matching the preview.
+    fake_io = _FakeIO(["", "", "", "", "2", "0", "0", "6", "3"])
+    delays = []
+
+    def fake_sleep(seconds):
+        delays.append(seconds)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    lines = []
+    rc = wizard.run_wizard(prompt=fake_io.prompt, display=lines.append, stream=io.StringIO())
+    assert rc == 0
+    assert delays == [0.0]
+    command = next(line for line in lines if "crest animate" in line)
+    assert "-s 0.0" in command and "-d 0.0" in command
+    assert "-w 6" in command and "-H 3" in command
+
+
+def test_wizard_int_prompt_enforces_cap():
+    # A width above the cap must re-prompt, not slip through to the renderer.
+    fake_io = _FakeIO(["", "", "", "", "", "5000", "4096", "3"])
+    opts = wizard.build_run_options(fake_io.prompt, fake_io.display)
+    assert opts["width"] == 4096
+    assert opts["height"] == 3
+    assert any("up to 4096" in line for line in fake_io.lines)
+
+
+def test_wizard_float_prompt_rejects_inf_and_negative_delay():
+    # action=2 (animate); speed "inf" re-prompts to 0.15; delay "-1"
+    # re-prompts to 0.05.
+    fake_io = _FakeIO(["", "", "", "", "2", "inf", "0.15", "-1", "0.05", "", ""])
+    opts = wizard.build_run_options(fake_io.prompt, fake_io.display)
+    assert opts["speed"] == 0.15
+    assert opts["delay"] == 0.05
+    assert any("finite" in line for line in fake_io.lines)
+    assert any(">= 0" in line for line in fake_io.lines)
 
 
 # --------------------------------------------------------------------------
@@ -493,3 +667,55 @@ def test_fish_helper_resolves_absolute_venv_path(tmp_path):
     proc = subprocess.run(["fish", "-c", script], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == "stub hi"
+
+
+# --------------------------------------------------------------------------
+# idle screensaver helper
+# --------------------------------------------------------------------------
+
+_IDLE_SAVER_PATH = pathlib.Path(__file__).resolve().parent.parent / "idle-screensaver.py"
+
+
+def _load_idle_saver():
+    spec = importlib.util.spec_from_file_location("idle_screensaver", _IDLE_SAVER_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_parse_who_idle_reads_the_idle_column():
+    """Regression guard: parts[-1] of ``who -u`` is the PID, never the idle time.
+
+    The samples are real lines from this machine's ``who -u`` (procps field
+    order: USER LINE DATE TIME IDLE PID [COMMENT]).
+    """
+    saver = _load_idle_saver()
+    text = (
+        "sky      tty2         2026-09-29 00:22  old         2302\n"
+        "sky      pts/1        2026-10-01 04:08  00:05        1135180 (:0)\n"
+        "sky      pts/2        2026-10-01 04:30  .            999\n"
+        "root     pts/3        2026-10-01 03:00  05:00        42\n"
+    )
+    # The screensaver may start only once every one of the user's sessions is
+    # idle, so the most recently active session wins; other users are ignored.
+    assert saver.parse_who_idle(text, "sky") == 0
+    without_active = "\n".join(text.splitlines()[:2])
+    assert saver.parse_who_idle(without_active, "sky") == 300
+    assert saver.parse_who_idle(text, "root") == 18000
+    assert saver.parse_who_idle(text, "nobody") == 0
+
+
+def test_parse_who_idle_handles_old_and_malformed_lines():
+    saver = _load_idle_saver()
+    assert saver.parse_who_idle("sky tty2 2026-09-29 00:22 old 2302", "sky") == 86400
+    assert saver.parse_who_idle("definitely not a who line", "sky") == 0
+    assert saver.parse_who_idle("", "sky") == 0
+
+
+def test_idle_time_flag_rejects_below_one():
+    proc = subprocess.run(
+        [sys.executable, str(_IDLE_SAVER_PATH), "--idle-time", "-5"],
+        capture_output=True, text=True, timeout=60,
+    )
+    assert proc.returncode == 2
+    assert "error: --idle-time must be at least 1 second" in proc.stderr

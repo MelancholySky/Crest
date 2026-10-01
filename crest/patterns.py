@@ -22,7 +22,13 @@ PatternFn = Callable[..., Grid]
 
 
 def _clamp(v: float) -> float:
-    """Clamp a value into the canonical ``[0.0, 1.0]`` range."""
+    """Clamp a value into the canonical ``[0.0, 1.0]`` range.
+
+    NaN fails every comparison, so pin it to the floor explicitly — a grid
+    built from a non-finite ``time`` must never smuggle NaN downstream.
+    """
+    if v != v:  # NaN is the only value not equal to itself.
+        return 0.0
     return 0.0 if v < 0.0 else (1.0 if v > 1.0 else v)
 
 

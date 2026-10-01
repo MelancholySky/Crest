@@ -7,7 +7,7 @@ set -l VENV $DIR/.venv
 if not test -d $VENV
     echo "First run: creating virtual environment in $VENV"
     python3 -m venv $VENV
-    $VENV/bin/pip install -e . --quiet
+    $VENV/bin/pip install -e $DIR --quiet
 end
 
 $VENV/bin/crest $argv

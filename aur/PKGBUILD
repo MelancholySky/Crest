@@ -9,7 +9,7 @@ arch=('any')
 url="https://github.com/melancholysky/crest"
 license=('MIT')
 depends=('python')
-makedepends=('python-build' 'python-installer' 'python-wheel')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
 optdepends=('python-pillow: PNG export support')
 source=("https://files.pythonhosted.org/packages/source/c/crest-art/crest_art-$pkgver.tar.gz")
 sha256sums=('4123d2e698e45a2e24593853afb5d2ed87a6606a93026a8414c1e0e7f0e97f12')
@@ -26,5 +26,5 @@ package() {
 }
 
 # To refresh the checksum after a new release:
-#   updpkgsums   (from pkgconf)   or   sha256sum "crest_art-$pkgver.tar.gz"
+#   updpkgsums   (from pacman-contrib)   or   sha256sum "crest_art-$pkgver.tar.gz"
 # Then regenerate .SRCINFO:   makepkg --printsrcinfo > .SRCINFO
