@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `crest.fish`: calling the `crest` fish function after `source` failed with
+  "The expanded command was empty" — the function looked up a variable local
+  to the sourced file, which dies as soon as `source` returns. The venv
+  binary path is now snapshotted into the function at definition time
+  (`--inherit-variable`) and made absolute, so the helper also survives a
+  later `cd` or a relative-path `source`.
+
 ## [0.1.0] - 2026-07-11
 
 ### Added

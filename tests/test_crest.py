@@ -20,6 +20,7 @@ import os
 import pathlib
 import re
 import shutil
+import subprocess
 import sys
 
 import pytest
@@ -438,3 +439,57 @@ def test_changelog_0_1_0_inventory_lines_are_intact():
 
 
 # (shutil/sys imported at top so they are available to every test)
+
+
+# --------------------------------------------------------------------------
+# shell helpers
+# --------------------------------------------------------------------------
+
+_CREST_FISH = pathlib.Path(__file__).resolve().parent.parent / "crest.fish"
+
+
+def _fake_repo_with_venv_crest(tmp_path):
+    """A throwaway tree shaped like a checkout: crest.fish next to a
+    .venv/bin/crest stub that echoes its arguments, so the fish helper can
+    be exercised without depending on a real virtual environment."""
+    repo = tmp_path / "repo"
+    (repo / ".venv" / "bin").mkdir(parents=True)
+    stub = repo / ".venv" / "bin" / "crest"
+    stub.write_text("#!/bin/sh\necho \"stub $*\"\n", encoding="utf-8")
+    stub.chmod(0o755)
+    shutil.copy(_CREST_FISH, repo / "crest.fish")
+    return repo / "crest.fish"
+
+
+def test_fish_helper_runs_after_source_scope_ends(tmp_path):
+    """Sourcing crest.fish must leave a ``crest`` function that still works.
+
+    Regression guard: the function used to look up a variable local to the
+    sourced file, which dies as soon as ``source`` returns, so calling
+    ``crest`` afterwards failed with "The expanded command was empty". A real
+    session sources the file in one command and calls ``crest`` in another;
+    the ``begin; ... end`` wrapper reproduces that scope boundary.
+    """
+    if shutil.which("fish") is None:
+        pytest.skip("fish not installed")
+    crest_fish = _fake_repo_with_venv_crest(tmp_path)
+    script = f'begin; source "{crest_fish}"; end; crest hello world'
+    proc = subprocess.run(["fish", "-c", script], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "stub hello world"
+
+
+def test_fish_helper_resolves_absolute_venv_path(tmp_path):
+    """The helper must capture an absolute path at definition time.
+
+    Sourcing via a relative path and then ``cd``-ing away breaks a helper
+    that kept the relative path, so crest.fish must normalize through
+    ``realpath`` before snapshotting.
+    """
+    if shutil.which("fish") is None:
+        pytest.skip("fish not installed")
+    crest_fish = _fake_repo_with_venv_crest(tmp_path)
+    script = f'cd "{crest_fish.parent}"; begin; source ./crest.fish; end; cd /; crest hi'
+    proc = subprocess.run(["fish", "-c", script], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "stub hi"

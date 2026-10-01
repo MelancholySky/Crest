@@ -162,7 +162,7 @@ Crest/
 │   ├── cli.py         # argparse interface
 │   └── wizard.py      # interactive setup
 ├── tests/
-│   └── test_crest.py  # 36 tests
+│   └── test_crest.py  # 38 tests
 ├── aur/               # PKGBUILD
 ├── pyproject.toml
 └── LICENSE
@@ -176,7 +176,7 @@ python3 -m pytest -q
 crest --version
 ```
 
-36 tests cover patterns, colour maps, renderers, and the CLI. Contributions
+38 tests cover patterns, colour maps, renderers, and the CLI. Contributions
 are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security
