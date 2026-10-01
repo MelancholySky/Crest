@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crest-art"
-version = "0.1.0"
+version = "0.1.1"
 description = "Generative terminal-art CLI — render animated parametric patterns."
 readme = "README.md"
 requires-python = ">=3.8"

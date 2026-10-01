@@ -8,6 +8,6 @@ from __future__ import annotations
 
 from . import colors, patterns, render
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = ["colors", "patterns", "render", "__version__"]
